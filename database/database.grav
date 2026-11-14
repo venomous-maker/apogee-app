@@ -1,0 +1,78 @@
+// database.grav — the shop's schema (migrations), its factories, and the
+// seeders that fill a fresh database.
+import "std"
+import "apogee-framework"
+import "../app/models.grav"
+
+namespace app {
+
+    class CreateUsersTable extends Migration {
+        constructor() {}
+        fn up() {
+            Schema.create("users", fn(t: Blueprint) {
+                t.id(); t.varchar("name"); t.varchar("email", 190).unique(); t.varchar("password"); t.varchar("role", 20).defaultValue("customer")
+                t.varchar("remember_token_value").nullable(); t.varchar("api_token", 64).nullable(); t.timestamps()
+            })
+        }
+        fn down() { Schema.dropIfExists("users"); }
+    }
+    class CreateProductsTable extends Migration {
+        constructor() {}
+        fn up() {
+            Schema.create("products", fn(t: Blueprint) {
+                t.id(); t.varchar("name"); t.varchar("slug", 190).unique(); t.text("description"); t.bigInteger("price"); t.bigInteger("stock")
+                t.foreignId("user_id").constrained(); t.timestamps()
+            })
+        }
+        fn down() { Schema.dropIfExists("products"); }
+    }
+    class CreateOrdersTable extends Migration {
+        constructor() {}
+        fn up() {
+            Schema.create("orders", fn(t: Blueprint) {
+                t.id(); t.foreignId("user_id").constrained(); t.varchar("number", 40).unique(); t.varchar("status", 20); t.bigInteger("total"); t.timestamps()
+            })
+            Schema.create("order_items", fn(t: Blueprint) {
+                t.id(); t.foreignId("order_id").constrained(); t.foreignId("product_id").constrained(); t.bigInteger("quantity"); t.bigInteger("price")
+            })
+        }
+        fn down() { Schema.dropIfExists("order_items"); Schema.dropIfExists("orders"); }
+    }
+
+    fn migrations() -> Array<Migration> { return [new CreateUsersTable() as Migration, new CreateProductsTable(), new CreateOrdersTable()]; }
+
+    fn userFactory() -> Factory<User> {
+        let hash = Passwords.make("password");                   // (hashed once: the cost is per hash)
+        return new Factory<User>(fn(f: Fake) -> HashMap<string, any> {
+            return fields("name", f.name(), "email", f.uniqueEmail(), "password", hash, "role", "customer");
+        });
+    }
+    fn productFactory(ownerId: long) -> Factory<Product> {
+        return new Factory<Product>(fn(f: Fake) -> HashMap<string, any> {
+            let name = Text.title(f.word() + " " + f.word());
+            return fields("name", name, "slug", Text.slug(name) + "-" + Text.lower(Text.random(4)), "description", f.sentence(12),
+                          "price", f.number(500, 50000), "stock", f.number(0, 40), "userId", ownerId);
+        });
+    }
+
+    class UserSeeder extends Seeder {
+        constructor() {}
+        fn run() {
+            User.create(fields("name", "Ada Lovelace", "email", "ada@shop.test", "password", Passwords.make("password"), "role", "admin"));
+            userFactory().using(new Fake(7)).count(5).createMany();
+        }
+    }
+    class ProductSeeder extends Seeder {
+        constructor() {}
+        fn run() {
+            let admin = User.query().firstWhere("email", "ada@shop.test");
+            productFactory(admin.id).using(new Fake(11)).count(12).createMany();
+            Product.create(fields("name", "Grav Mug", "slug", "grav-mug", "description", "A mug for compiled coffee, holds 350 ml and the whole standard library.",
+                                  "price", 120000, "stock", 25, "userId", admin.id));
+        }
+    }
+    class DatabaseSeeder extends Seeder {
+        constructor() {}
+        fn run() { self.call(new UserSeeder()); self.call(new ProductSeeder()); }
+    }
+}
