@@ -1,0 +1,9 @@
+/.env
+/storage/*
+!/storage/.gitkeep
+/database/*.sqlite*
+/src/main
+/tests/*
+!/tests/*.grav
+!/tests/fixtures/
+*.gen.c

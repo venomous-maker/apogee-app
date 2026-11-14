@@ -1,0 +1,6 @@
+name = "apogee-app"
+main = "src/main.grav"
+paths = ["app"]
+
+[dependencies]
+apogee-framework = "github.com/venomous-maker/apogee-framework"

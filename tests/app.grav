@@ -1,0 +1,218 @@
+// The shop, end to end: every module through the app, as a user (and an
+// operator) would meet it. Run from the project's root: grav test tests/app.grav
+import "std"
+import "std/net"
+import "../app/all.grav"
+use app.*
+use apogee.*
+use orbit.*
+
+// A browser: keeps cookies, and sends the CSRF token of the last page's form.
+class Browser {
+    public app: Application
+    public cookies: HashMap<string, string>
+    public last: Response = null
+    public lastPath: string = ""
+    constructor(app: Application) { self.app = app; self.cookies = new HashMap<string, string>() }
+    fn send(method: string, path: string, body: string = "", contentType: string = "", accept: string = "") -> Response {
+        let req = Request.make(method, path, body, contentType)
+        if (accept != "") { req.http.headers.set("Accept", accept) }
+        if (self.lastPath != "") { req.http.headers.set("Referer", "http://localhost" + self.lastPath) }
+        let parts = new Array<string>()
+        for (k in self.cookies.keys()) { parts.push(k + "=" + self.cookies[k]) }
+        if (parts.size() > 0) { req.http.headers.set("Cookie", Str.join(parts, "; ")) }
+        let res = self.app.handle(req)
+        for (c in res.http.cookies()) { if (c.value == "") { self.cookies.remove(c.name) } else { self.cookies.put(c.name, c.value) } }
+        self.last = res
+        return res
+    }
+    fn get(path: string) -> Response { let r = self.send("GET", path); self.lastPath = path; return r }
+    fn token() -> string { return Text.betweenFirst(self.last.body(), "name=\"_token\" value=\"", "\"") }
+    // A form post with the page's CSRF token.
+    fn post(path: string, form: HashMap<string, string>) -> Response {
+        let parts = new Array<string>()
+        parts.push("_token=" + Url.encode(self.token()))
+        for (k in form.keys()) { parts.push(Url.encode(k) + "=" + Url.encode(form[k])) }
+        return self.send("POST", path, Str.join(parts, "&"), "application/x-www-form-urlencoded")
+    }
+}
+
+fn freshApp() -> Application {
+    OS.setEnv("APP_ENV", "testing")
+    new File("storage/testing.sqlite").delete()
+    new File("storage/testing.sqlite-wal").delete()
+    new File("storage/testing.sqlite-shm").delete()
+    new File("storage/framework/down").delete()             // (a run that stopped while down)
+    let app = createApp(".")
+    assertEq(app.call("migrate --seed"), 0)
+    return app
+}
+fn work(app: Application, queues: Array<string>) {
+    let o = new WorkerOptions(); o.stopWhenEmpty = true; o.memoryMb = 0; o.sleep = 0.01; o.tries = 3; o.backoff = [0]
+    app.make::<QueueManager>().worker().work("memory", queues, o)
+}
+fn sentMail(app: Application) -> Array<RenderedMail> { return (app.make::<MailManager>().mailer("array").transport as ArrayTransport).messages() }
+fn json(app: Application, method: string, path: string, body: string = "", token: string = "") -> Response {
+    let req = Request.make(method, path, body, body == "" ? "" : "application/json")
+    req.http.headers.set("Accept", "application/json")
+    if (token != "") { req.http.headers.set("Authorization", "Bearer " + token) }
+    return app.handle(req)
+}
+fn tokenFor(app: Application, email: string) -> string {
+    let users = app.make::<OrbitUserProvider>()
+    return users.issueApiToken(User.query().firstWhere("email", email))
+}
+
+test "the console: migrations and seeders, about, routes, the schedule, the shop's commands" {
+    let app = freshApp()
+    assertEq("${User.count()} ${Product.count()} ${User.query().firstWhere("email", "ada@shop.test").isAdmin()}", "6 13 true")
+    app.call("about")
+    assertEq(Str.contains(app.output(), "Apogee Shop") && Str.contains(app.output(), "Africa/Nairobi"), true)
+    app.call("route:list --path=products")
+    assertEq(Str.contains(app.output(), "products.show") && Str.contains(app.output(), "api/products/{product:slug}"), true)
+    app.call("schedule:list")
+    let schedule = app.output()
+    assertEq(Str.contains(schedule, "30 8 * * 1-5") == false && Str.contains(schedule, "0 8 * * 1-5  remind stale orders") && Str.contains(schedule, "30 7 * * 1") && Str.contains(schedule, "heartbeat"), true)
+    assertEq(app.call("shop:hello Grav"), 0)
+    assertEq(app.output(), "Hello, Grav!\n")
+    let bob = userFactory().create(fields("email", "bob@shop.test", "name", "Bob Builder"))
+    assertEq(app.call("shop:admin bob@shop.test", ["no"]), 1)
+    assertEq(app.call("shop:admin bob@shop.test", ["yes"]), 0)
+    assertEq(User.find(bob.id).isAdmin(), true)
+    assertEq(app.call("shop:import tests/fixtures/products.csv --dry-run"), 0)
+    assertEq(Str.contains(app.output(), "| Red Kettle ") && Str.contains(app.output(), "5 rows would be imported."), true)
+    assertEq(app.call("shop:import tests/fixtures/products.csv --chunk=2"), 0)
+    assertEq(app.make::<QueueManager>().size("imports"), 3)
+    work(app, ["imports"])
+    assertEq("${Product.count()} ${Str.startsWith(str(app.make::<CacheRepository>().get("import:last")), "products.csv at ")} ${ShopActivity.log.contains("imported tea-cosy")}", "18 true true")
+    app.call("shop:report --json")
+    assertEq(Str.contains(app.output(), "\"orders\":0"), true)
+    assertEq(app.call("nope:command"), 1)
+}
+
+test "pages: the home page (cached), products in pages, a product by slug, a 404, middleware headers" {
+    let app = freshApp()
+    let b = new Browser(app)
+    let home = b.get("/")
+    assertEq("${home.statusCode()} ${Str.contains(home.body(), "<h1>Welcome to Apogee Shop</h1>")} ${Str.contains(home.body(), "Grav Mug")} ${Str.endsWith(home.getHeader("X-Response-Time"), "ms")}", "200 true true true")
+    assertEq(Str.contains(home.body(), "#1 of 4") && Str.contains(home.body(), "Log in") && Str.contains(home.body(), "/static/app.css") == false, true)
+    assertEq(app.make::<CacheRepository>().has("home:featured"), true)
+    let page2 = b.get("/products?page=2")
+    assertEq(Str.contains(page2.body(), "page 2 of 3") && Str.contains(page2.body(), "← Previous") && Str.contains(page2.body(), "/ Products"), true)
+    let mug = b.get("/products/grav-mug")
+    assertEq(Str.contains(mug.body(), "KES 1,200.00 · 25 in stock") && Str.contains(mug.body(), "<title>Grav Mug</title>"), true)
+    assertEq(b.get("/products/no-such-thing").statusCode(), 404)
+    assertEq(b.get("/no/such/page").statusCode(), 404)
+}
+
+test "accounts: a form request's errors and old input, sign-up, welcome mail, sign-in throttling, sign-out" {
+    let app = freshApp()
+    let b = new Browser(app)
+    b.get("/register")
+    let bad = b.post("/register", {"name": "", "email": "ADA@shop.test", "password": "short", "password_confirmation": "nope"})
+    assertEq("${bad.statusCode()} ${bad.getHeader("Location")}", "302 http://localhost/register")   // back where the form was
+    let back = b.get("/register")
+    assertEq(Str.contains(back.body(), "That email already has an account.") && Str.contains(back.body(), "The name field is required.") && Str.contains(back.body(), "value=\"ada@shop.test\""), true)
+    let ok = b.post("/register", {"name": "Grace Hopper", "email": "grace@shop.test", "password": "compiler1952", "password_confirmation": "compiler1952"})
+    assertEq(ok.getHeader("Location"), "/")
+    let welcome = b.get("/")
+    assertEq(Str.contains(welcome.body(), "Welcome, Grace Hopper!") && Str.contains(welcome.body(), "GH · Grace Hopper"), true)
+    work(app, ["default"])
+    let mail = sentMail(app)
+    assertEq("${mail.size()} ${mail[0].subject} ${mail[0].to[0]} ${Str.contains(mail[0].html, "<h1>Welcome, Grace Hopper!</h1>")} ${Str.contains(mail[0].text, "ships free")}", "1 Welcome to the shop, Grace Hopper Grace Hopper <grace@shop.test> true true")
+    assertEq(Str.contains(ShopActivity.log.join(","), "app.registered"), true)
+    b.post("/logout", new HashMap<string, string>())
+    assertEq(Str.contains(b.get("/").body(), "Log in"), true)
+    let guest = new Browser(app)
+    for (i in 0..5) { guest.get("/login"); guest.post("/login", {"email": "grace@shop.test", "password": "wrong"}) }
+    guest.get("/login")
+    let locked = guest.post("/login", {"email": "grace@shop.test", "password": "compiler1952"})
+    assertEq(Str.contains(guest.get("/login").body(), "Too many attempts."), true)
+    let other = new Browser(app)
+    other.get("/login")
+    assertEq(other.post("/login", {"email": "ada@shop.test", "password": "password", "remember": "1"}).getHeader("Location"), "/")
+    assertEq(other.cookies.containsKey("remember_web") && locked.statusCode() == 302, true)
+}
+
+test "orders: the API with a token, validation, stock, a queued listener, a job chain, mail and notifications" {
+    let app = freshApp()
+    let token = tokenFor(app, "ada@shop.test")
+    assertEq(json(app, "GET", "/api/me", "", token).data() is HashMap<string, any>, true)
+    let tooMany = json(app, "POST", "/api/orders", "{\"items\": [{\"slug\": \"grav-mug\", \"quantity\": 9}, {\"slug\": \"grav-mug\", \"quantity\": 1}]}", token)
+    assertEq("${tooMany.statusCode()} ${Str.contains(tooMany.body(), "items.1.slug")}", "422 true")
+    let unknown = json(app, "POST", "/api/orders", "{\"items\": [{\"slug\": \"ghost\", \"quantity\": 1}]}", token)
+    assertEq(Str.contains(unknown.body(), "The selected items.0.slug is invalid."), true)
+    let placed = json(app, "POST", "/api/orders", "{\"items\": [{\"slug\": \"grav-mug\", \"quantity\": 2}]}", token)
+    assertEq(placed.statusCode(), 201)
+    let number = str((placed.data() as HashMap<string, any>)["number"])
+    assertEq("${Product.query().firstWhere("slug", "grav-mug").stock} ${(placed.data() as HashMap<string, any>)["total_text"]}", "23 KES 2,400.00")   // reserved at once
+    let q = app.make::<QueueManager>()
+    assertEq("${q.size("mail")} ${q.size("orders")}", "1 1")
+    work(app, ["mail", "orders", "default"])
+    let mails = sentMail(app)
+    let confirmation = collect(mails).firstWhere(fn(m: RenderedMail) -> bool { return Str.startsWith(m.subject, "Order ") && Str.endsWith(m.subject, " confirmed") })
+    assertEq(Str.contains(confirmation.html, "<td style=\"padding:8px 0;text-align: left\">Grav Mug</td>") || Str.contains(confirmation.html, "Grav Mug"), true)
+    assertEq(Str.contains(confirmation.text, "Total: KES 2,400.00") && confirmation.tags.contains("orders"), true)
+    assertEq(str(app.make::<CacheRepository>().get("invoice:" + number)), "2 x Grav Mug\nTotal: KES 2,400.00")
+    assertEq(Order.query().firstWhere("number", number).status, "packing")
+    let inbox = json(app, "GET", "/api/notifications", "", token)
+    assertEq(Str.contains(inbox.body(), "\"order\":\"" + number + "\"") && Str.contains(inbox.body(), "OrderShipped"), true)
+    assertEq(collect(mails).some(fn(m: RenderedMail) -> bool { return Str.contains(m.subject, "is being packed") }), true)
+    assertEq(ShopActivity.log.contains("order " + number), true)
+}
+
+test "authorization: policies with before hooks and decisions, abilities, can: middleware" {
+    let app = freshApp()
+    let gate = app.make::<Gate>()
+    let ada = User.query().firstWhere("email", "ada@shop.test")
+    let bob = userFactory().create(fields("email", "bob@shop.test"))
+    let mug = Product.query().firstWhere("slug", "grav-mug")
+    assertEq("${gate.allows(ada, "update", [mug as any])} ${gate.allows(bob, "update", [mug as any])} ${gate.allows(null, "view", [mug as any])}", "true false true")
+    assertEq(gate.inspect(bob, "delete", [mug as any]).status, 404)
+    assertEq(json(app, "GET", "/api/stats", "", tokenFor(app, "bob@shop.test")).statusCode(), 403)
+    let stats = json(app, "GET", "/api/stats", "", tokenFor(app, "ada@shop.test"))
+    assertEq("${stats.statusCode()} ${Str.contains(stats.body(), "\"count\":13")} ${Str.contains(stats.body(), "\"by_letter\"")}", "200 true true")
+    let b = new Browser(app)
+    b.get("/login")
+    assertEq(b.post("/login", {"email": "bob@shop.test", "password": "password"}).getHeader("Location"), "/")
+    assertEq(Str.contains(b.get("/products/grav-mug").body(), "Log out"), true)         // (req.user on a public page)
+    assertEq(b.send("PUT", "/products/grav-mug", "_token=" + Url.encode(b.token()) + "&price=1", "application/x-www-form-urlencoded", "application/json").statusCode(), 403)
+    assertEq(b.get("/reports").statusCode(), 403)
+}
+
+test "the API: resources in pages, filters, throttling headers, signed URLs" {
+    let app = freshApp()
+    let page = json(app, "GET", "/api/products?per_page=5&page=2")
+    let d = page.data() as HashMap<string, any>
+    assertEq("${(d["data"] as Array<any>).size()} ${(d["meta"] as HashMap<string, any>)["total"]} ${(d["meta"] as HashMap<string, any>)["current_page"]}", "5 13 2")
+    assertEq(page.getHeader("X-RateLimit-Limit"), "60")
+    let mug = json(app, "GET", "/api/products?q=mug")
+    assertEq(Str.contains(mug.body(), "\"name\":\"Grav Mug\"") && !Str.contains(mug.body(), "\"stock\""), true)    // stock: admins only
+    assertEq(Str.contains(json(app, "GET", "/api/products/grav-mug").body(), "\"in_stock\":true"), true)
+    let user = User.query().firstWhere("email", "ada@shop.test")
+    let signed = app.router().signedUrl("unsubscribe", {"user": user.id}, Time.now() + 3600)
+    assertEq(app.handle(Request.make("GET", signed)).body(), "Unsubscribed ada@shop.test")
+    assertEq(app.handle(Request.make("GET", Str.replace(signed, "/" + "${user.id}" + "?", "/2?"))).statusCode(), 403)
+}
+
+test "operations: maintenance mode, the schedule's tasks, cache clearing" {
+    let app = freshApp()
+    assertEq(app.call("down --secret=letmein --retry=120"), 0)
+    assertEq(json(app, "GET", "/api/products").statusCode(), 503)
+    let b = new Browser(app)
+    assertEq(b.get("/letmein").statusCode(), 302)
+    assertEq(b.get("/").statusCode(), 200)                        // the bypass cookie
+    app.call("up")
+    let s = app.schedule()
+    new File("storage/logs/weekly-report.log").delete()
+    let monday = Moment.parse("2026-11-16 07:30", "Africa/Nairobi")
+    let r = s.runDue(monday)
+    assertEq(r.ran.contains("shop:report --days=7") && r.ran.contains("heartbeat"), true)
+    assertEq(Str.contains(new File("storage/logs/weekly-report.log").read(), "Sales since"), true)
+    let nine = s.runDue(Moment.parse("2026-11-16 09:00", "Africa/Nairobi"))
+    assertEq("${nine.ran.contains("app.RebuildSearchIndex")} ${app.make::<QueueManager>().size("maintenance")}", "true 1")
+    work(app, ["maintenance"])
+    assertEq(Str.contains(str(app.make::<CacheRepository>().get("search:words")), "mug"), true)
+    assertEq(app.call("cache:clear"), 0)
+    assertEq(app.make::<CacheRepository>().has("search:words"), false)
+}
