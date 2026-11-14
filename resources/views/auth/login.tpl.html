@@ -1,0 +1,13 @@
+@extends('layouts.app')
+@section('title', 'Log in')
+@section('content')
+<h1>Log in</h1>
+<form method="POST" action="/login">
+@csrf
+<label>Email <input name="email" type="email" value="{{ old('email') }}"></label>
+@error('email')<p class="error">{{ message }}</p>@enderror
+<label>Password <input name="password" type="password"></label>
+<label><input type="checkbox" name="remember" value="1" @checked(old('remember'))> Remember me</label>
+<button>Log in</button>
+</form>
+@endsection

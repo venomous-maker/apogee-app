@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>@yield('title', appName)</title>
+<link rel="stylesheet" href="{{ asset('app.css') }}">
+@stack('styles')
+</head>
+<body>
+<header>
+@section('nav')
+<a href="{{ route('home') }}">{{ appName }}</a>
+<a href="/products">Products</a>
+@show
+@auth
+<span class="user">{{ user.initials() }} · {{ user.name }}</span>
+<form method="POST" action="/logout">@csrf<button>Log out</button></form>
+@endauth
+@guest
+<a href="/login">Log in</a> <a href="/register">Register</a>
+@endguest
+</header>
+@include('partials.flash')
+<main>@yield('content')</main>
+<footer>&copy; {{ year }} {{ appName }}</footer>
+@stack('scripts')
+</body>
+</html>

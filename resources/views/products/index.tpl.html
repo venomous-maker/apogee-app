@@ -1,0 +1,13 @@
+@extends('layouts.app')
+@section('title', 'Products')
+@section('nav')
+@parent
+<span class="crumb">/ Products</span>
+@endsection
+@section('content')
+<h1>Products <small>page {{ page }} of {{ pages }}</small></h1>
+@foreach(products as product)
+<x-product-card :product="product" />
+@endforeach
+<nav class="pages">@if(page > 1)<a href="/products?page={{ page - 1 }}">← Previous</a>@endif @if(page < pages)<a href="/products?page={{ page + 1 }}">Next →</a>@endif</nav>
+@endsection

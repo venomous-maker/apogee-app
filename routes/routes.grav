@@ -1,0 +1,49 @@
+// routes.grav — the shop's routes: pages and forms (the "web" group:
+// session, CSRF), and the JSON API (under /api: token auth, throttled).
+import "std"
+import "apogee-framework"
+import "../app/models.grav"
+import "../app/http.grav"
+
+namespace app {
+
+    fn webRoutes(r: Router) {
+        r.get::<HomeController>("/", "index").name("home")
+        r.middleware(["guest"]).group(fn(r: Router) {
+            r.get::<AuthController>("/register", "showRegister").name("register")
+            r.post::<AuthController>("/register", "register").middleware(["throttle:10,1"])
+            r.get::<AuthController>("/login", "showLogin").name("login")
+            r.post::<AuthController>("/login", "login")
+        })
+        r.middleware(["auth"]).group(fn(r: Router) {
+            r.post::<AuthController>("/logout", "logout").name("logout")
+            r.post::<AuthController>("/tokens", "token").name("tokens.create")
+            r.post::<OrderController>("/orders", "store").name("orders.store")
+            r.get("/reports", fn(req: Request) -> Response { return Response.text("reports") }).middleware(["can:view-reports"]).name("reports")
+        })
+        r.resource::<ProductController>("products")             // (its actions: index, show, store, update, destroy)
+        r.get("/unsubscribe/{user}", fn(req: Request) -> Response {
+            return Response.text("Unsubscribed " + (req.route("user") as User).email)
+        }).name("unsubscribe").signed()
+        r.bind("user", fn(id: string, req: Request) -> any { return User.find(id) })
+    }
+
+    fn apiRoutes(r: Router) {
+        r.get::<ApiProductController>("/products", "index").name("products.index")
+        r.get::<ApiProductController>("/products/{product:slug}", "show").name("products.show")
+        r.middleware(["auth:api"]).group(fn(r: Router) {
+            r.get("/me", fn(req: Request) -> Response {
+                let u = req.user as User
+                return Response.json({"name": u.name, "email": u.email, "initials": u.initials(), "orders": u.orders().count()})
+            }).name("me")
+            r.get::<ApiProductController>("/stats", "stats").middleware(["can:view-reports"]).name("stats")
+            r.post::<OrderController>("/orders", "store").name("orders.store")
+            r.get("/notifications", fn(req: Request) -> Response {
+                let inbox = req.make::<NotificationSender>().store.forNotifiable((req.user as User).notifiableKey())
+                let list = new Array<any>()
+                for (n in inbox) { list.push({"type": n.type, "data": n.data, "read": n.isRead()} as any) }
+                return Response.json({"data": list})
+            })
+        })
+    }
+}

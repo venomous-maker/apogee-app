@@ -1,0 +1,14 @@
+@extends('layouts.app')
+@section('title', product.name)
+@section('content')
+<h1>{{ product.name }}</h1>
+<p>{{ product.description }}</p>
+<p class="price">{{ money(product.price) }} · {{ product.stock }} in stock · added {{ product.added() }}</p>
+@auth
+<form method="POST" action="/orders">@csrf
+<input type="hidden" name="items[0][slug]" value="{{ product.slug }}">
+<input type="number" name="items[0][quantity]" value="{{ old('items.0.quantity', 1) }}" min="1" max="10">
+<button @disabled(!product.inStock())>Order</button>
+</form>
+@endauth
+@endsection

@@ -1,0 +1,16 @@
+@extends('layouts.app')
+@section('title', 'Register')
+@section('content')
+<h1>Create an account</h1>
+<form method="POST" action="/register">
+@csrf
+<label>Name <input name="name" value="{{ old('name') }}"></label>
+@error('name')<p class="error">{{ message }}</p>@enderror
+<label>Email <input name="email" type="email" value="{{ old('email') }}"></label>
+@error('email')<p class="error">{{ message }}</p>@enderror
+<label>Password <input name="password" type="password"></label>
+@error('password')<p class="error">{{ message }}</p>@enderror
+<label>Confirm <input name="password_confirmation" type="password"></label>
+<button>Register</button>
+</form>
+@endsection

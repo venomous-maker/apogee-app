@@ -1,0 +1,6 @@
+<article class="card {{ product.inStock() ? '' : 'sold-out' }}">
+<h3><a href="/products/{{ product.slug }}">{{ product.name }}</a></h3>
+<p>{{ product.summary() }}</p>
+<p class="price">{{ product.priceText() }}@unless(product.inStock()) · <em>sold out</em>@endunless</p>
+@isset(footer){!! footer !!}@endisset
+</article>

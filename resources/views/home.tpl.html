@@ -1,0 +1,16 @@
+@extends('layouts.app')
+@section('title', appName ~ ' — ' ~ today)
+@section('content')
+<h1>Welcome to {{ appName }}</h1>
+<p>Today is {{ today }}.</p>
+<section class="featured">
+@forelse(products as product)
+<x-product-card :product="product"><x-slot:footer><small>#{{ loop.iteration }} of {{ loop.count }}</small></x-slot:footer></x-product-card>
+@empty
+<p>No products yet.</p>
+@endforelse
+</section>
+@endsection
+@push('scripts')
+<script src="{{ asset('home.js') }}"></script>
+@endpush
