@@ -1,0 +1,40 @@
+// app.grav — the shop as an Apogee application: its providers, routes,
+// middleware, exception rendering, schedule, commands, migrations and seeders.
+import "std"
+import "apogee-framework"
+import "../app/models.grav"
+import "../app/domain.grav"
+import "../app/http.grav"
+import "../app/console.grav"
+import "../database/database.grav"
+import "../routes/routes.grav"
+
+namespace app {
+
+    fn createApp(basePath: string = ".") -> Application {
+        return Application.configure(basePath)
+            .withProviders([new AppServiceProvider() as ServiceProvider])
+            .withRouting(fn(r: Router) { webRoutes(r) }, fn(r: Router) { apiRoutes(r) })
+            .withMiddleware(fn(m: MiddlewareSetup) {
+                m.alias("timed", m.app.make::<TimeRequests>())
+                m.append("timed")
+            })
+            .withExceptions(fn(k: HttpKernel) {
+                // an out-of-stock race becomes a 409, not a 500
+                k.renderUsing("OutOfStock", fn(e: Exception, req: Request) -> Response { return Response.json({"message": e.message()}, 409) })
+            })
+            .withSchedule(fn(s: Schedule) {
+                s.job(new RemindStaleOrders()).dailyAt("08:00").weekdays().name("remind stale orders")
+                s.job(new RebuildSearchIndex(), "maintenance").hourly().onOneServer()
+                s.command("shop:report --days=7").weeklyOn(1, "07:30").appendOutputTo("storage/logs/weekly-report.log").withoutOverlapping()
+                s.call(fn() { Logging.info("heartbeat") }).everyFiveMinutes().between("06:00", "23:00").name("heartbeat")
+                s.command("queue:flush --hours=168").daily().environments(["production"])
+            })
+            .withCommands(fn(k: ConsoleKernel) {
+                k.command("shop:hello {name=world}", fn(c: ClosureCommand) -> int { c.info("Hello, " + c.argument("name") + "!"); return 0 }).describe("Say hello")
+            })
+            .withMigrations(migrations())
+            .withSeeders([new DatabaseSeeder() as Seeder, new UserSeeder(), new ProductSeeder()])
+            .create()
+    }
+}

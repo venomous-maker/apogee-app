@@ -1,0 +1,8 @@
+// all.grav — the shop: every file of the app (tests import this).
+import "models.grav"
+import "domain.grav"
+import "http.grav"
+import "console.grav"
+import "../database/database.grav"
+import "../routes/routes.grav"
+import "../bootstrap/app.grav"

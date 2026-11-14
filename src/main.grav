@@ -1,0 +1,9 @@
+// main.grav — the shop's executable: `./apogee-app serve`, `migrate`,
+// `db:seed`, `queue:work`, `schedule:run`, `shop:import products.csv`, ….
+import "std"
+import "../app/all.grav"
+use app.*
+
+fn main() {
+    Process.exit(createApp(".").run(Process.args()))
+}

@@ -1,0 +1,98 @@
+// console.grav — the shop's own commands, and its service provider (gate
+// abilities, view composers, the event subscriber, route bindings).
+import "std"
+import "apogee-framework"
+import "models.grav"
+import "domain.grav"
+import "http.grav"
+
+namespace app {
+
+    // ./app shop:import products.csv --chunk=50 --dry-run
+    class ImportProductsCommand extends ConsoleCommand {
+        constructor() {}
+        fn signature() -> string { return "shop:import {file : A CSV of name,price,stock} {--chunk=50 : Rows per job} {--dry-run : Only show what would be imported}"; }
+        fn description() -> string { return "Import products from a CSV, as a batch of queued jobs"; }
+        fn handle(queue: QueueManager) -> int {
+            let path = self.argument("file");
+            if (!new File(path).exists()) { self.error("No such file: " + path); return 1; }
+            let rows = collect(Str.lines(new File(path).read())).skip(1).reject(fn(l: string) -> bool { return Str.trim(l) == ""; });
+            if (self.flag("dry-run")) {
+                let table = new Array<Array<string>>();
+                for (r in rows.take(10).all()) { table.push(Str.split(r, ",")); }
+                self.table(["Name", "Price", "Stock"], table);
+                self.info("${rows.count()} rows would be imported.");
+                return 0;
+            }
+            let owner = User.query().firstWhere("role", "admin");
+            if (owner == null) { self.error("Seed an admin first (db:seed)."); return 1; }
+            let jobs = new Array<Job>();
+            for (chunk in rows.chunk(self.optionInt("chunk", 50) as int)) { jobs.push(new ImportProducts(chunk.all(), owner.id)); }
+            let batch = queue.batch(jobs).name("import " + Path.basename(path)).then(new ImportFinished(Path.basename(path))).allowFailures().onQueue("imports").dispatch();
+            self.output.infoBlock("Queued ${jobs.size()} job(s) as batch " + batch.id + ".");
+            return 0;
+        }
+    }
+
+    // ./app shop:report --days=7
+    class SalesReportCommand extends ConsoleCommand {
+        constructor() {}
+        fn signature() -> string { return "shop:report {--days=7 : How far back} {--json}"; }
+        fn description() -> string { return "Sales over the last days, by product"; }
+        fn handle() -> int {
+            let since = Moment.now().subDays(self.optionInt("days", 7)).startOfDay();
+            let orders = collect(Order.query().where("created_at", ">=", since.toDateTime()).get());
+            let items = orders.flatMap(fn(o: Order) -> Array<OrderItem> { return o.items().get(); });
+            let byProduct = items.groupBy(fn(i: OrderItem) -> string { return Product.find(i.productId).name; });
+            let rows = new Array<Array<string>>();
+            for (name in items.groupKeys(fn(i: OrderItem) -> string { return Product.find(i.productId).name; })) {
+                let g = byProduct[name];
+                rows.push([name, "${g.sumOf("quantity") as long}", Number.currency(g.sum(fn(i: OrderItem) -> double { return (i.price * i.quantity) as double; }) / 100.0, "KES")]);
+            }
+            if (self.flag("json")) {
+                self.output.writeln(JsonWriter.encode({"since": since.toIso8601String(), "orders": orders.count(), "revenue": orders.sumOf("total")}));
+                return 0;
+            }
+            self.output.writeln("<info>Sales since " + since.toFormattedDateString() + " (" + since.diffForHumans() + ")</>");
+            self.table(["Product", "Units", "Revenue"], rows, "box");
+            self.output.twoColumn("Orders", "${orders.count()}");
+            self.output.twoColumn("Revenue", Number.currency(orders.sumOf("total") / 100.0, "KES"));
+            return 0;
+        }
+    }
+
+    // ./app shop:admin ada@shop.test  (asks before promoting)
+    class MakeAdminCommand extends ConsoleCommand {
+        constructor() {}
+        fn signature() -> string { return "shop:admin {email} {--force}"; }
+        fn description() -> string { return "Make a user an admin"; }
+        fn isolated() -> bool { return true; }
+        fn handle() -> int {
+            let u = User.query().firstWhere("email", self.argument("email"));
+            if (u == null) { self.error("No user with that email."); return 1; }
+            if (!self.flag("force") && !self.confirm("Make " + u.name + " an admin?", false)) { self.warn("Nothing changed."); return 1; }
+            u.role = "admin";
+            u.save();
+            self.task("Promoting " + u.name, fn() -> bool { return true; });
+            return 0;
+        }
+    }
+
+    class AppServiceProvider extends ServiceProvider {
+        constructor() {}
+        fn register() {
+            let c = self.app.container;
+            c.singleton::<TimeRequests>(fn(c: Container) -> TimeRequests { return new TimeRequests(c.make::<LogChannel>()); });
+        }
+        fn boot(events: Events, gate: Gate, views: ViewFactory) {
+            events.subscribe(new ShopActivity());
+            gate.policy::<Product, ProductPolicy>();
+            gate.define("view-reports", fn(user: any, args: Array<any>) -> any { return user != null && (user as User).isAdmin(); });
+            // every page knows the signed-in user and the cart size
+            views.composer("*", fn(name: string, data: HashMap<string, any>) {
+                if (!data.containsKey("year")) { data.put("year", Moment.now().year()); }
+            });
+            views.helper("money", fn(a: Array<any>, ctx: RenderContext) -> any { return Number.currency(Data.number(a[0]) / 100.0, "KES"); });
+        }
+    }
+}
