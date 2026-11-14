@@ -1,0 +1,157 @@
+// domain.grav — what happens around an order: events and their listeners
+// (one queued), a subscriber, jobs (a chain, a batch, a unique job, rate
+// limits), the mail it sends and the notification it leaves.
+import "std"
+import "apogee-framework"
+import "models.grav"
+
+namespace app {
+
+    // ── events ───────────────────────────────────────────────────────────────
+    @Event class OrderPlaced {
+        public order: Order = null                  // (travels by id when a listener is queued)
+        constructor(order: Order = null) { self.order = order; }
+    }
+    @Event class ProductImported {
+        public slug: string = ""
+        constructor(slug: string = "") { self.slug = slug; }
+    }
+
+    // Queued: mails the confirmation from a worker.
+    class SendOrderConfirmation extends Listener {
+        private mail: Mailer
+        constructor(mail: Mailer) { self.mail = mail; }
+        fn shouldQueue() -> bool { return true; }
+        fn queue() -> string { return "mail"; }
+        fn handle(e: OrderPlaced) {
+            let customer = User.find(e.order.userId);
+            self.mail.to(customer.email, customer.name).send(new OrderConfirmation(e.order.id));
+        }
+    }
+    // Right away: takes the items out of stock.
+    class ReserveStock extends Listener {
+        constructor() {}
+        fn handle(e: OrderPlaced) {
+            for (item in e.order.items().get()) {
+                let p = Product.find(item.productId);
+                p.stock = p.stock - item.quantity;
+                p.save();
+            }
+        }
+    }
+    // Several events in one class.
+    class ShopActivity implements Subscriber {
+        static log: Array<string> = new Array<string>()
+        static lock: Mutex = new Mutex()
+        constructor() {}
+        static fn add(line: string) { ShopActivity.lock.lock(); ShopActivity.log.push(line); ShopActivity.lock.unlock(); }
+        fn subscribe(events: Events) {
+            events.listen::<OrderPlaced>(fn(e: OrderPlaced) { ShopActivity.add("order " + e.order.number); });
+            events.listen::<ProductImported>(fn(e: ProductImported) { ShopActivity.add("imported " + e.slug); });
+            events.on("app.*", fn(name: string, payload: any) { ShopActivity.add(name); });
+        }
+    }
+
+    // ── jobs ─────────────────────────────────────────────────────────────────
+    // A chain: the invoice, then the warehouse (each after the one before succeeds).
+    class GenerateInvoice extends Job {
+        public order: Order = null                   // (by id: fetched fresh on the worker)
+        constructor(order: Order = null) { self.order = order; self.tries = 3; self.backoff = [5, 30]; }
+        fn middleware() -> Array<JobMiddleware> { return [new WithoutOverlapping("invoice:${self.order.id}", 10) as JobMiddleware]; }
+        fn handle(cache: CacheRepository) {
+            let lines = new Array<string>();
+            for (item in self.order.items().get()) { lines.push("${item.quantity} x " + Product.find(item.productId).name); }
+            cache.put("invoice:" + self.order.number, Str.join(lines, "\n") + "\nTotal: " + self.order.totalText(), 86400);
+        }
+    }
+    class NotifyWarehouse extends Job {
+        public orderNumber: string = ""
+        constructor(orderNumber: string = "") { self.orderNumber = orderNumber; }
+        // (the warehouse's API takes 10 calls a minute)
+        fn middleware() -> Array<JobMiddleware> { return [new RateLimitedJob("warehouse-api", 10, 60) as JobMiddleware]; }
+        fn handle(notifications: NotificationSender) {
+            let order = Order.query().firstWhere("number", self.orderNumber);
+            order.status = "packing";
+            order.save();
+            notifications.send(User.find(order.userId), new OrderShipped(order.number));
+        }
+    }
+    // A batch part: imports products from a CSV slice.
+    class ImportProducts extends Job {
+        public rows: Array<string> = new Array<string>()
+        public ownerId: long = 0
+        // (the worker makes one with no arguments: a list default is not a literal)
+        constructor() {}
+        constructor(rows: Array<string>, ownerId: long) { self.rows = rows; self.ownerId = ownerId; }
+        fn middleware() -> Array<JobMiddleware> { return [new SkipIfBatchCancelled() as JobMiddleware]; }
+        fn handle(events: Events) {
+            for (row in self.rows) {
+                let cols = Str.split(row, ",");
+                if (cols.size() < 3) { self.fail("bad row: " + row); return; }
+                let name = Str.trim(cols[0]);
+                let slug = Text.slug(name);
+                Product.create(fields("name", name, "slug", slug, "description", "Imported " + Moment.now().toFormattedDateString(),
+                                      "price", Integer.parseOr(Str.trim(cols[1]), 0), "stock", Integer.parseOr(Str.trim(cols[2]), 0), "userId", self.ownerId));
+                events.dispatch(new ProductImported(slug));
+            }
+        }
+    }
+    class ImportFinished extends Job {
+        public label: string = ""
+        constructor(label: string = "") { self.label = label; }
+        fn handle(cache: CacheRepository) { cache.put("import:last", self.label + " at " + Moment.now().toDateTimeString()); }
+    }
+    // One at a time, however often it is dispatched.
+    class RebuildSearchIndex extends Job {
+        constructor() {}
+        fn uniqueId() -> string { return "search-index"; }
+        fn uniqueFor() -> long { return 600; }
+        fn handle(cache: CacheRepository) {
+            let words = collect(Product.all()).flatMap(fn(p: Product) -> Array<string> { return Str.words(Str.lower(p.name)); }).distinct();
+            cache.put("search:words", words.sort(fn(a: string, b: string) -> int { return Str.compare(a, b); }).join(" "));
+        }
+    }
+    // Every night: orders still "placed" after two days get a reminder.
+    class RemindStaleOrders extends Job {
+        constructor() {}
+        fn handle(log: LogChannel) {
+            let cutoff = Moment.now().subDays(2).toDateTime();
+            let stale = Order.query().where("status", "placed").where("created_at", "<", cutoff).get();
+            log.info("stale orders: ${stale.size()}");
+        }
+    }
+
+    // ── mail and notifications ───────────────────────────────────────────────
+    class OrderConfirmation extends Mailable {
+        public orderId: long = 0
+        constructor(orderId: long = 0) { self.orderId = orderId; }
+        fn build() {
+            let order = Order.find(self.orderId);
+            let rows = new StringBuilder();
+            for (item in order.items().get()) {
+                let p = Product.find(item.productId);
+                rows.append("| " + p.name + " | ${item.quantity} | " + Number.currency((item.price as double) / 100.0, "KES") + " |\n");
+            }
+            self.subject("Order " + order.number + " confirmed")
+                .markdown("# Thanks for your order!\n\nOrder **" + order.number + "**, placed " + order.placedAt().format("l, jS F Y \\a\\t g:i A") + ".\n\n" +
+                          "| Item | Qty | Price |\n|:-----|----:|------:|\n" + rows.toString() + "\n**Total: " + order.totalText() + "**\n\n" +
+                          "@button(https://shop.test/orders/" + order.number + ")View your order@endbutton\n\n@panel\nWe'll email you again when it ships.\n@endpanel")
+                .tag("orders").metadata("order", order.number);
+        }
+    }
+    class WelcomeMail extends Mailable {
+        public name: string = ""
+        constructor(name: string = "") { self.name = name; }
+        fn build() { self.subject("Welcome to the shop, " + self.name).view("mail.welcome", {"name": self.name}).textView("mail.welcome_text"); }
+    }
+    class OrderShipped extends Notification {
+        public orderNumber: string = ""
+        constructor(orderNumber: string = "") { self.orderNumber = orderNumber; }
+        fn via(n: Notifiable) -> Array<string> { return ["mail", "database"]; }
+        fn toMail(n: Notifiable) -> MailMessage {
+            return new MailMessage().subject("Order " + self.orderNumber + " is being packed").greeting("Good news!")
+                .line("Your order " + self.orderNumber + " is with the warehouse.").action("Track it", "https://shop.test/orders/" + self.orderNumber).success();
+        }
+        fn toArray(n: Notifiable) -> HashMap<string, any> { return {"order": self.orderNumber, "status": "packing"}; }
+    }
+}
