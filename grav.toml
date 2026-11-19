@@ -1,5 +1,6 @@
 name = "apogee-app"
 main = "src/main.grav"
+grav = ">=1.7.0"
 paths = ["app"]
 
 [dependencies]
