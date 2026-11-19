@@ -6,6 +6,8 @@ compiler versions it builds with.
 
 ## Unreleased
 
+## 0.1.0 (2026-11-19)
+
 The first tagged release. Needs grav 1.7.0 or newer.
 
 A small shop built on [Apogee](https://github.com/venomous-maker/apogee-framework), the web framework for [Grav](https://github.com/venomous-maker/grav). It's an example that uses every module, from routes, form requests and policies to queued jobs, mail, the scheduler and the console. The test suite drives all of it through the app.
