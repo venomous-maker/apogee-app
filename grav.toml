@@ -4,4 +4,4 @@ grav = ">=1.7.0"
 paths = ["app"]
 
 [dependencies]
-apogee-framework = "github.com/venomous-maker/apogee-framework@v0.1.0"
+apogee-framework = "github.com/venomous-maker/apogee-framework@v0.1.1"
