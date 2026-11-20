@@ -6,6 +6,11 @@ compiler versions it builds with.
 
 ## Unreleased
 
+### Requirements
+
+- Needs grav 1.9.0 or later, and uses the 0.2.0 releases of the packages it
+  depends on.
+
 ## 0.1.1 (2026-11-19)
 
 - Uses the newer releases of apogee-framework, apogee-queue, grav-cache, grav-orbit, grav-db, apogee-console, apogee-scheduler, apogee-mail (faster row loading and query building in grav-orbit and grav-db).
