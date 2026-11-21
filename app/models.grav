@@ -1,5 +1,6 @@
 // models.grav — the shop's data, as Orbit models: users (who sign in, and
-// get notifications), products (found by slug in URLs), orders and their items.
+// get notifications), products (found by slug in URLs, and searchable), orders
+// and their items.
 import "std"
 import "apogee-framework"
 
@@ -35,7 +36,7 @@ namespace app {
         fn memberSince() -> string { return self.createdAt == null ? "" : Moment.fromDateTime(self.createdAt).diffForHumans(); }
     }
 
-    class Product extends Model {
+    class Product extends Model implements Searchable {
         public id: long = 0
         public name: string = ""
         public slug: string = ""
@@ -57,6 +58,10 @@ namespace app {
         fn inStock() -> bool { return self.stock > 0; }
         fn summary() -> string { return Text.limit(self.description, 60, "…", true); }
         fn added() -> string { return self.createdAt == null ? "" : Moment.fromDateTime(self.createdAt).diffForHumans(); }
+        // What search finds it by (Scout keeps the index in step with saves).
+        fn toSearchableArray() -> HashMap<string, any> {
+            return {"name": self.name, "description": self.description, "in_stock": self.inStock()};
+        }
     }
 
     class Order extends Model {
