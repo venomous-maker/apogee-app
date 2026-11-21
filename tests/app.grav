@@ -216,3 +216,51 @@ test "operations: maintenance mode, the schedule's tasks, cache clearing" {
     assertEq(app.call("cache:clear"), 0)
     assertEq(app.make::<CacheRepository>().has("search:words"), false)
 }
+
+test "search, social sign-in, and the dashboards" {
+    // (configuration is process-wide: start from none, with Pulse and the queue's dashboard on)
+    Config.reset()
+    Env.reset()
+    OS.setEnv("PULSE_ENABLED", "true")
+    OS.setEnv("QUEUE_DASHBOARD_ENABLED", "true")
+    let app = freshApp()
+    // search: the seeded products were indexed as they were saved
+    let found = json(app, "GET", "/api/search?q=mug")
+    assertEq(found.statusCode(), 200)
+    assert(Str.contains(found.body(), "\"name\":\"Grav Mug\""))
+    assert(!Str.contains(json(app, "GET", "/api/search?q=zzyzx").body(), "Grav Mug"))
+    // signing in with GitHub (faked): a new account, signed in
+    Socialite.fake("github", Socialite.makeUser("77", "Grace@Navy.test", "Grace Hopper"))
+    let b = new Browser(app)
+    assertEq(b.get("/auth/github").getHeader("Location"), "/auth/github/callback?code=fake")
+    assertEq(b.get("/auth/github/callback?code=fake").getHeader("Location"), "/")
+    let grace = User.query().firstWhere("email", "grace@navy.test") as User
+    assertEq(grace.name, "Grace Hopper")
+    assert(Str.contains(b.get("/").body(), "Log out"))
+    // an address the provider does not vouch for signs nobody in
+    let unverified = Socialite.makeUser("78", "ada@shop.test", "Not Ada")
+    unverified.emailVerified = false
+    Socialite.fake("github", unverified)
+    let c = new Browser(app)
+    c.get("/auth/github/callback?code=fake")
+    assert(!Str.contains(c.get("/").body(), "Log out"))
+    assertEq(c.get("/auth/google").statusCode(), 404)                   // not configured
+    Socialite.reset()
+    // the dashboards: admins only (not local)
+    let admin = new Browser(app)
+    admin.get("/login")
+    admin.post("/login", {"email": "ada@shop.test", "password": "password"})
+    assertEq(admin.get("/pulse/api/overview").statusCode(), 200)
+    assertEq(admin.get("/queue-dashboard").statusCode(), 200)
+    let bob = new Browser(app)
+    userFactory().create(fields("email", "bob@shop.test"))
+    bob.get("/login")
+    bob.post("/login", {"email": "bob@shop.test", "password": "password"})
+    assertEq(bob.get("/pulse/api/overview").statusCode(), 403)
+    Pulse.stop()
+    Pulse.recording = false
+    OS.setEnv("PULSE_ENABLED", "false")
+    OS.setEnv("QUEUE_DASHBOARD_ENABLED", "false")
+    Config.reset()
+    Env.reset()
+}
