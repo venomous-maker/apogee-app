@@ -60,6 +60,9 @@ The other commands:
 | **scheduler** | A daily job on weekdays, an hourly job `onOneServer`, a weekly command with `withoutOverlapping` and its output appended to a log, a five-minute heartbeat `between` hours, a production-only cleanup. |
 | **console** | `shop:import` (a dry-run table, then batch jobs), `shop:report` (a box table, `--json`), `shop:admin` (a confirm question, `isolated`), and a closure command (`shop:hello`). |
 | **framework** | Providers, maintenance mode (`down --secret`), migrations and seeders, `make:*`, `about`, `route:list`, and `schedule:list`. |
+| **scout** | Products are `Searchable`: Scout keeps a full-text index in the database in step with saves, and `/api/search?q=` (with `in_stock=1`) searches it. `RebuildSearchIndex` re-imports them. |
+| **socialite** | `/auth/{provider}` signs in with GitHub, Google and the rest (each one with a client id in `.env`): the account with that verified email, or a new one. |
+| **telescope / pulse / queue-dashboard** | Telescope is on locally (`/telescope`); Pulse (`/pulse`) and the queue's dashboard (`/queue-dashboard`) are opt in. Outside local development they are for admins only (`viewTelescope`, `viewPulse`, `viewQueueDashboard`). |
 | **grav-orbit / db / cache / redis / logger** | Models, migrations, factories and seeders. The cache stores the front page's products, invoices and the search index. Locks and the rate limiter. Logging channels. |
 
 ## Tests
