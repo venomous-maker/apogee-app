@@ -6,6 +6,8 @@ compiler versions it builds with.
 
 ## Unreleased
 
+## 0.3.1 (2026-11-21)
+
 - On apogee-framework 0.3.1 (cheaper feature checks, Telescope and Pulse).
 - Laid out by `grav fmt` and tidied as grav 1.11's lints suggest; no change in
   behaviour.
