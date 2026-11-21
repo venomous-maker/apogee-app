@@ -107,6 +107,7 @@ namespace app {
         fn uniqueId() -> string { return "search-index"; }
         fn uniqueFor() -> long { return 600; }
         fn handle(cache: CacheRepository) {
+            Scout.importAll::<Product>();
             let words = collect(Product.all()).flatMap(fn(p: Product) -> Array<string> { return Str.words(Str.lower(p.name)); }).distinct();
             cache.put("search:words", words.sort(fn(a: string, b: string) -> int { return Str.compare(a, b); }).join(" "));
         }
