@@ -6,6 +6,8 @@ compiler versions it builds with.
 
 ## Unreleased
 
+## 0.3.0 (2026-11-21)
+
 - On apogee-framework 0.3.0, with its new modules.
 - Products are searchable with Scout: `/api/search?q=`.
 - Sign-in with GitHub, Google and the rest at `/auth/{provider}`.
