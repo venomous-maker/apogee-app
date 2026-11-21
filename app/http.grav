@@ -93,6 +93,37 @@ namespace app {
         }
     }
 
+    // Signing in with GitHub, Google… (each provider with a client id in .env):
+    // the account with that email, or a new one.
+    class SocialController extends Controller {
+        private auth: AuthManager
+        constructor(auth: AuthManager) { self.auth = auth; }
+        fn redirect(req: Request) -> Response {
+            let provider = str(req.route("provider"));
+            if (!Socialite.has(provider)) { throw new HttpException(404); }
+            return Socialite.driver(provider).redirect(req);
+        }
+        fn callback(req: Request) -> Response {
+            let provider = str(req.route("provider"));
+            if (!Socialite.has(provider)) { throw new HttpException(404); }
+            let who: SocialUser = null;
+            try { who = Socialite.driver(provider).user(req); }
+            catch (e: InvalidStateException) { return Response.redirect("/login"); }
+            catch (e: OAuthException) { return Response.redirect("/login"); }
+            // (only an address the provider vouches for may sign in to an account that has it)
+            if (who.email == "" || !who.emailVerified) {
+                throw ValidationException.withMessages({"email": ["Your " + provider + " account has no verified email address."]});
+            }
+            let email = Str.lower(who.email);
+            let u = User.query().firstWhere("email", email) as User;
+            if (u == null) {
+                u = User.create(fields("name", who.name != "" ? who.name : who.nickname, "email", email, "password", Passwords.make(Hash.randomToken(24))));
+            }
+            self.auth.session().login(req, u);
+            return AuthManager.attachCookies(req, Response.redirect("/"));
+        }
+    }
+
     class AuthController extends Controller {
         private auth: AuthManager
         private views: ViewFactory
@@ -204,6 +235,14 @@ namespace app {
             return ResourceCollection.paged(page, fn(x: any) -> JsonResource { return new ProductResource(x); }).toResponse(req);
         }
         fn show(req: Request, product: Product) -> Response { return new ProductResource(product).toResponse(req); }
+        // Full-text search (Scout): ?q=, &in_stock=1.
+        fn search(req: Request) -> Response {
+            let s = Scout.search::<Product>(req.string("q"));
+            if (req.boolean("in_stock")) { s = s.where("in_stock", true); }
+            let list = new Array<any>();
+            for (p in s.take(req.integer("limit", 10) as int).get()) { list.push(p as any); }
+            return ResourceCollection.of(list, fn(x: any) -> JsonResource { return new ProductResource(x); }).toResponse(req);
+        }
         fn stats(req: Request) -> any {
             let products = collect(Product.all());
             return {"count": products.count(), "stock": products.sumOf("stock"), "average_price": Number.format(products.avg(fn(p: Product) -> double { return (p.price as double) / 100.0; }), 2),
