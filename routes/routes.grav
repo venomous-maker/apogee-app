@@ -14,6 +14,8 @@ namespace app {
             r.post::<AuthController>("/register", "register").middleware(["throttle:10,1"])
             r.get::<AuthController>("/login", "showLogin").name("login")
             r.post::<AuthController>("/login", "login")
+            r.get::<SocialController>("/auth/{provider}", "redirect").name("social.redirect")
+            r.get::<SocialController>("/auth/{provider}/callback", "callback").name("social.callback")
         })
         r.middleware(["auth"]).group(fn(r: Router) {
             r.post::<AuthController>("/logout", "logout").name("logout")
@@ -30,6 +32,7 @@ namespace app {
 
     fn apiRoutes(r: Router) {
         r.get::<ApiProductController>("/products", "index").name("products.index")
+        r.get::<ApiProductController>("/search", "search").name("products.search")
         r.get::<ApiProductController>("/products/{product:slug}", "show").name("products.show")
         r.middleware(["auth:api"]).group(fn(r: Router) {
             r.get("/me", fn(req: Request) -> Response {
