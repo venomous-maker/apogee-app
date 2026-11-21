@@ -6,6 +6,12 @@ compiler versions it builds with.
 
 ## Unreleased
 
+- On apogee-framework 0.3.0, with its new modules.
+- Products are searchable with Scout: `/api/search?q=`.
+- Sign-in with GitHub, Google and the rest at `/auth/{provider}`.
+- The dashboards (Telescope, Pulse, the queue's) for admins outside local
+  development; `.env.example` lists the new settings.
+
 ## 0.2.2 (2026-11-21)
 
 ### Requirements
