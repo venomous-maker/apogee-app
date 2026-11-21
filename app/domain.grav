@@ -10,19 +10,29 @@ namespace app {
     // ── events ───────────────────────────────────────────────────────────────
     @Event class OrderPlaced {
         public order: Order = null                  // (travels by id when a listener is queued)
-        constructor(order: Order = null) { self.order = order; }
+        constructor(order: Order = null) {
+            self.order = order;
+        }
     }
     @Event class ProductImported {
         public slug: string = ""
-        constructor(slug: string = "") { self.slug = slug; }
+        constructor(slug: string = "") {
+            self.slug = slug;
+        }
     }
 
     // Queued: mails the confirmation from a worker.
     class SendOrderConfirmation extends Listener {
         private mail: Mailer
-        constructor(mail: Mailer) { self.mail = mail; }
-        fn shouldQueue() -> bool { return true; }
-        fn queue() -> string { return "mail"; }
+        constructor(mail: Mailer) {
+            self.mail = mail;
+        }
+        fn shouldQueue() -> bool {
+            return true;
+        }
+        fn queue() -> string {
+            return "mail";
+        }
         fn handle(e: OrderPlaced) {
             let customer = User.find(e.order.userId);
             self.mail.to(customer.email, customer.name).send(new OrderConfirmation(e.order.id));
@@ -44,7 +54,11 @@ namespace app {
         static log: Array<string> = new Array<string>()
         static lock: Mutex = new Mutex()
         constructor() {}
-        static fn add(line: string) { ShopActivity.lock.lock(); ShopActivity.log.push(line); ShopActivity.lock.unlock(); }
+        static fn add(line: string) {
+            ShopActivity.lock.lock()
+            ShopActivity.log.push(line)
+            ShopActivity.lock.unlock()
+        }
         fn subscribe(events: Events) {
             events.listen::<OrderPlaced>(fn(e: OrderPlaced) { ShopActivity.add("order " + e.order.number); });
             events.listen::<ProductImported>(fn(e: ProductImported) { ShopActivity.add("imported " + e.slug); });
@@ -56,8 +70,14 @@ namespace app {
     // A chain: the invoice, then the warehouse (each after the one before succeeds).
     class GenerateInvoice extends Job {
         public order: Order = null                   // (by id: fetched fresh on the worker)
-        constructor(order: Order = null) { self.order = order; self.tries = 3; self.backoff = [5, 30]; }
-        fn middleware() -> Array<JobMiddleware> { return [new WithoutOverlapping("invoice:${self.order.id}", 10) as JobMiddleware]; }
+        constructor(order: Order = null) {
+            self.order = order
+            self.tries = 3
+            self.backoff = [5, 30]
+        }
+        fn middleware() -> Array<JobMiddleware> {
+            return [new WithoutOverlapping("invoice:${self.order.id}", 10) as JobMiddleware];
+        }
         fn handle(cache: CacheRepository) {
             let lines = new Array<string>();
             for (item in self.order.items().get()) { lines.push("${item.quantity} x " + Product.find(item.productId).name); }
@@ -66,9 +86,13 @@ namespace app {
     }
     class NotifyWarehouse extends Job {
         public orderNumber: string = ""
-        constructor(orderNumber: string = "") { self.orderNumber = orderNumber; }
+        constructor(orderNumber: string = "") {
+            self.orderNumber = orderNumber;
+        }
         // (the warehouse's API takes 10 calls a minute)
-        fn middleware() -> Array<JobMiddleware> { return [new RateLimitedJob("warehouse-api", 10, 60) as JobMiddleware]; }
+        fn middleware() -> Array<JobMiddleware> {
+            return [new RateLimitedJob("warehouse-api", 10, 60) as JobMiddleware];
+        }
         fn handle(notifications: NotificationSender) {
             let order = Order.query().firstWhere("number", self.orderNumber);
             order.status = "packing";
@@ -82,12 +106,20 @@ namespace app {
         public ownerId: long = 0
         // (the worker makes one with no arguments: a list default is not a literal)
         constructor() {}
-        constructor(rows: Array<string>, ownerId: long) { self.rows = rows; self.ownerId = ownerId; }
-        fn middleware() -> Array<JobMiddleware> { return [new SkipIfBatchCancelled() as JobMiddleware]; }
+        constructor(rows: Array<string>, ownerId: long) {
+            self.rows = rows
+            self.ownerId = ownerId
+        }
+        fn middleware() -> Array<JobMiddleware> {
+            return [new SkipIfBatchCancelled() as JobMiddleware];
+        }
         fn handle(events: Events) {
             for (row in self.rows) {
                 let cols = Str.split(row, ",");
-                if (cols.size() < 3) { self.fail("bad row: " + row); return; }
+                if (cols.size() < 3) {
+                    self.fail("bad row: " + row)
+                    return
+                }
                 let name = Str.trim(cols[0]);
                 let slug = Text.slug(name);
                 Product.create(fields("name", name, "slug", slug, "description", "Imported " + Moment.now().toFormattedDateString(),
@@ -98,14 +130,22 @@ namespace app {
     }
     class ImportFinished extends Job {
         public label: string = ""
-        constructor(label: string = "") { self.label = label; }
-        fn handle(cache: CacheRepository) { cache.put("import:last", self.label + " at " + Moment.now().toDateTimeString()); }
+        constructor(label: string = "") {
+            self.label = label;
+        }
+        fn handle(cache: CacheRepository) {
+            cache.put("import:last", self.label + " at " + Moment.now().toDateTimeString());
+        }
     }
     // One at a time, however often it is dispatched.
     class RebuildSearchIndex extends Job {
         constructor() {}
-        fn uniqueId() -> string { return "search-index"; }
-        fn uniqueFor() -> long { return 600; }
+        fn uniqueId() -> string {
+            return "search-index";
+        }
+        fn uniqueFor() -> long {
+            return 600;
+        }
         fn handle(cache: CacheRepository) {
             Scout.importAll::<Product>();
             let words = collect(Product.all()).flatMap(fn(p: Product) -> Array<string> { return Str.words(Str.lower(p.name)); }).distinct();
@@ -125,7 +165,9 @@ namespace app {
     // ── mail and notifications ───────────────────────────────────────────────
     class OrderConfirmation extends Mailable {
         public orderId: long = 0
-        constructor(orderId: long = 0) { self.orderId = orderId; }
+        constructor(orderId: long = 0) {
+            self.orderId = orderId;
+        }
         fn build() {
             let order = Order.find(self.orderId);
             let rows = new StringBuilder();
@@ -142,17 +184,27 @@ namespace app {
     }
     class WelcomeMail extends Mailable {
         public name: string = ""
-        constructor(name: string = "") { self.name = name; }
-        fn build() { self.subject("Welcome to the shop, " + self.name).view("mail.welcome", {"name": self.name}).textView("mail.welcome_text"); }
+        constructor(name: string = "") {
+            self.name = name;
+        }
+        fn build() {
+            self.subject("Welcome to the shop, " + self.name).view("mail.welcome", {"name": self.name}).textView("mail.welcome_text");
+        }
     }
     class OrderShipped extends Notification {
         public orderNumber: string = ""
-        constructor(orderNumber: string = "") { self.orderNumber = orderNumber; }
-        fn via(n: Notifiable) -> Array<string> { return ["mail", "database"]; }
+        constructor(orderNumber: string = "") {
+            self.orderNumber = orderNumber;
+        }
+        fn via(n: Notifiable) -> Array<string> {
+            return ["mail", "database"];
+        }
         fn toMail(n: Notifiable) -> MailMessage {
             return new MailMessage().subject("Order " + self.orderNumber + " is being packed").greeting("Good news!")
                 .line("Your order " + self.orderNumber + " is with the warehouse.").action("Track it", "https://shop.test/orders/" + self.orderNumber).success();
         }
-        fn toArray(n: Notifiable) -> HashMap<string, any> { return {"order": self.orderNumber, "status": "packing"}; }
+        fn toArray(n: Notifiable) -> HashMap<string, any> {
+            return {"order": self.orderNumber, "status": "packing"};
+        }
     }
 }

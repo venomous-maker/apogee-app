@@ -13,7 +13,10 @@ class Browser {
     public cookies: HashMap<string, string>
     public last: Response = null
     public lastPath: string = ""
-    constructor(app: Application) { self.app = app; self.cookies = new HashMap<string, string>() }
+    constructor(app: Application) {
+        self.app = app
+        self.cookies = new HashMap<string, string>()
+    }
     fn send(method: string, path: string, body: string = "", contentType: string = "", accept: string = "") -> Response {
         let req = Request.make(method, path, body, contentType)
         if (accept != "") { req.http.headers.set("Accept", accept) }
@@ -26,8 +29,14 @@ class Browser {
         self.last = res
         return res
     }
-    fn get(path: string) -> Response { let r = self.send("GET", path); self.lastPath = path; return r }
-    fn token() -> string { return Text.betweenFirst(self.last.body(), "name=\"_token\" value=\"", "\"") }
+    fn get(path: string) -> Response {
+        let r = self.send("GET", path)
+        self.lastPath = path
+        return r
+    }
+    fn token() -> string {
+        return Text.betweenFirst(self.last.body(), "name=\"_token\" value=\"", "\"")
+    }
     // A form post with the page's CSRF token.
     fn post(path: string, form: HashMap<string, string>) -> Response {
         let parts = new Array<string>()
@@ -51,7 +60,9 @@ fn work(app: Application, queues: Array<string>) {
     let o = new WorkerOptions(); o.stopWhenEmpty = true; o.memoryMb = 0; o.sleep = 0.01; o.tries = 3; o.backoff = [0]
     app.make::<QueueManager>().worker().work("memory", queues, o)
 }
-fn sentMail(app: Application) -> Array<RenderedMail> { return (app.make::<MailManager>().mailer("array").transport as ArrayTransport).messages() }
+fn sentMail(app: Application) -> Array<RenderedMail> {
+    return (app.make::<MailManager>().mailer("array").transport as ArrayTransport).messages()
+}
 fn json(app: Application, method: string, path: string, body: string = "", token: string = "") -> Response {
     let req = Request.make(method, path, body, body == "" ? "" : "application/json")
     req.http.headers.set("Accept", "application/json")
@@ -124,7 +135,10 @@ test "accounts: a form request's errors and old input, sign-up, welcome mail, si
     b.post("/logout", new HashMap<string, string>())
     assertEq(Str.contains(b.get("/").body(), "Log in"), true)
     let guest = new Browser(app)
-    for (i in 0..5) { guest.get("/login"); guest.post("/login", {"email": "grace@shop.test", "password": "wrong"}) }
+    for (i in 0..5) {
+        guest.get("/login")
+        guest.post("/login", {"email": "grace@shop.test", "password": "wrong"})
+    }
     guest.get("/login")
     let locked = guest.post("/login", {"email": "grace@shop.test", "password": "compiler1952"})
     assertEq(Str.contains(guest.get("/login").body(), "Too many attempts."), true)

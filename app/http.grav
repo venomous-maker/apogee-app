@@ -11,21 +11,33 @@ namespace app {
     // ── form requests ────────────────────────────────────────────────────────
     class RegisterRequest extends FormRequest {
         fn rules() -> HashMap<string, any> {
-            return {"name": "required|string|max:80", "email": ["required", "email", Rule.unique("users", "email")],
-                    "password": ["required", "confirmed", Password.min(8).letters().numbers()]};
+            return {
+                "name": "required|string|max:80", "email": ["required", "email", Rule.unique("users", "email")],
+                "password": ["required", "confirmed", Password.min(8).letters().numbers()]
+            };
         }
-        fn messages() -> HashMap<string, string> { return {"email.unique": "That email already has an account."}; }
-        fn prepareForValidation() { self.merge({"email": Str.lower(Str.trim(self.string("email")))}); }
+        fn messages() -> HashMap<string, string> {
+            return {"email.unique": "That email already has an account."};
+        }
+        fn prepareForValidation() {
+            self.merge({"email": Str.lower(Str.trim(self.string("email")))});
+        }
     }
     class StoreProductRequest extends FormRequest {
-        fn authorize() -> bool { return self.user != null && (self.user as User).isAdmin(); }
+        fn authorize() -> bool {
+            return self.user != null && (self.user as User).isAdmin();
+        }
         fn rules() -> HashMap<string, any> {
             return {"name": "required|string|max:120", "description": "required|string|min:10", "price": "required|integer|min:1", "stock": "required|integer|between:0,10000"};
         }
-        fn attributes() -> HashMap<string, string> { return {"price": "price (in cents)"}; }
+        fn attributes() -> HashMap<string, string> {
+            return {"price": "price (in cents)"};
+        }
     }
     class PlaceOrderRequest extends FormRequest {
-        fn authorize() -> bool { return self.user != null; }
+        fn authorize() -> bool {
+            return self.user != null;
+        }
         fn rules() -> HashMap<string, any> {
             return {"items": "required|array|min:1|max:20", "items.*.slug": "required|string|distinct|exists:products,slug", "items.*.quantity": "required|integer|between:1,10"};
         }
@@ -40,7 +52,9 @@ namespace app {
 
     // ── API resource ─────────────────────────────────────────────────────────
     class ProductResource extends JsonResource {
-        constructor(p: any = null) { super(p); }
+        constructor(p: any = null) {
+            super(p);
+        }
         fn toArray(req: Request) -> HashMap<string, any> {
             let p = self.resource as Product;
             return self.fields().add("slug", p.slug).add("name", p.name).add("price", p.price).add("price_text", p.priceText())
@@ -54,7 +68,9 @@ namespace app {
     // Times every request and says so in a header (and the log, when slow).
     class TimeRequests implements Middleware {
         private log: LogChannel
-        constructor(log: LogChannel) { self.log = log; }
+        constructor(log: LogChannel) {
+            self.log = log;
+        }
         fn handle(req: Request, next: fn(Request) -> Response) -> Response {
             let sw = new Stopwatch();
             let res = next(req);
@@ -67,9 +83,15 @@ namespace app {
     // ── policy ───────────────────────────────────────────────────────────────
     class ProductPolicy extends Policy {
         constructor() {}
-        fn before(user: any, ability: string) -> bool? { return user != null && (user as User).isAdmin() ? true : null; }
-        @Guests fn view(user: User, product: Product) -> bool { return true; }
-        fn update(user: User, product: Product) -> bool { return user.id == product.userId; }
+        fn before(user: any, ability: string) -> bool? {
+            return user != null && (user as User).isAdmin() ? true : null;
+        }
+        @Guests fn view(user: User, product: Product) -> bool {
+            return true;
+        }
+        fn update(user: User, product: Product) -> bool {
+            return user.id == product.userId;
+        }
         fn delete(user: User, product: Product) -> Decision {
             return user.id == product.userId ? Decision.allow() : Decision.denyAsNotFound();
         }
@@ -79,7 +101,10 @@ namespace app {
     class HomeController extends Controller {
         private views: ViewFactory
         private cache: CacheRepository
-        constructor(views: ViewFactory, cache: CacheRepository) { self.views = views; self.cache = cache; }
+        constructor(views: ViewFactory, cache: CacheRepository) {
+            self.views = views
+            self.cache = cache
+        }
         fn index(req: Request) -> Response {
             // (the front page's products come from the cache for a minute)
             let featured = self.cache.remember("home:featured", 60, fn() -> any {
@@ -97,7 +122,9 @@ namespace app {
     // the account with that email, or a new one.
     class SocialController extends Controller {
         private auth: AuthManager
-        constructor(auth: AuthManager) { self.auth = auth; }
+        constructor(auth: AuthManager) {
+            self.auth = auth;
+        }
         fn redirect(req: Request) -> Response {
             let provider = str(req.route("provider"));
             if (!Socialite.has(provider)) { throw new HttpException(404); }
@@ -127,8 +154,13 @@ namespace app {
     class AuthController extends Controller {
         private auth: AuthManager
         private views: ViewFactory
-        constructor(auth: AuthManager, views: ViewFactory) { self.auth = auth; self.views = views; }
-        fn showRegister(req: Request) -> Response { return self.views.response(req, "auth.register"); }
+        constructor(auth: AuthManager, views: ViewFactory) {
+            self.auth = auth
+            self.views = views
+        }
+        fn showRegister(req: Request) -> Response {
+            return self.views.response(req, "auth.register");
+        }
         fn register(req: RegisterRequest, mail: Mailer, events: Events) -> Response {
             let data = req.validated();
             let u = User.create(fields("name", data["name"], "email", data["email"], "password", Passwords.make(str(data["password"]))));
@@ -138,7 +170,9 @@ namespace app {
             (req.session as Session).flash("status", "Welcome, " + u.name + "!");
             return Response.redirect("/");
         }
-        fn showLogin(req: Request) -> Response { return self.views.response(req, "auth.login"); }
+        fn showLogin(req: Request) -> Response {
+            return self.views.response(req, "auth.login");
+        }
         fn login(req: Request, limiter: CacheRepository) -> Response {
             req.validate({"email": "required|email", "password": "required"});
             let key = "login:" + Str.lower(req.string("email")) + "|" + req.ip();
@@ -165,12 +199,16 @@ namespace app {
 
     class ProductController extends Controller {
         private views: ViewFactory
-        constructor(views: ViewFactory) { self.views = views; }
+        constructor(views: ViewFactory) {
+            self.views = views;
+        }
         fn index(req: Request) -> Response {
             let page = Product.query().orderBy("name").paginate(req.integer("page", 1), 6);
             return self.views.response(req, "products.index", {"products": page.items, "page": page.page, "pages": page.lastPage()});
         }
-        fn show(req: Request, product: Product) -> Response { return self.views.response(req, "products.show", {"product": product}); }
+        fn show(req: Request, product: Product) -> Response {
+            return self.views.response(req, "products.show", {"product": product});
+        }
         fn store(req: StoreProductRequest, queue: QueueManager) -> Response {
             let data = req.validated();
             let p = Product.create(fields("name", data["name"], "slug", Text.slug(str(data["name"])), "description", data["description"],
@@ -225,16 +263,18 @@ namespace app {
         fn index(req: Request) -> Response {
             let all = collect(Product.query().orderBy("name").get())
                 .when(req.filled("q"), fn(c: Collection<Product>) -> Collection<Product> {
-                    let q = Str.lower(req.string("q"));
-                    return c.filter(fn(p: Product) -> bool { return Str.contains(Str.lower(p.name), q); });
-                })
+                let q = Str.lower(req.string("q"));
+                return c.filter(fn(p: Product) -> bool { return Str.contains(Str.lower(p.name), q); });
+            })
                 .when(req.boolean("in_stock"), fn(c: Collection<Product>) -> Collection<Product> { return c.filter(fn(p: Product) -> bool { return p.inStock(); }); });
             let list = new Array<any>();
             for (p in all.all()) { list.push(p as any); }
             let page = Paginator.slice(list, req.integer("per_page", 5) as int, req.integer("page", 1) as int, "/api/products");
             return ResourceCollection.paged(page, fn(x: any) -> JsonResource { return new ProductResource(x); }).toResponse(req);
         }
-        fn show(req: Request, product: Product) -> Response { return new ProductResource(product).toResponse(req); }
+        fn show(req: Request, product: Product) -> Response {
+            return new ProductResource(product).toResponse(req);
+        }
         // Full-text search (Scout): ?q=, &in_stock=1.
         fn search(req: Request) -> Response {
             let s = Scout.search::<Product>(req.string("q"));
@@ -245,9 +285,11 @@ namespace app {
         }
         fn stats(req: Request) -> any {
             let products = collect(Product.all());
-            return {"count": products.count(), "stock": products.sumOf("stock"), "average_price": Number.format(products.avg(fn(p: Product) -> double { return (p.price as double) / 100.0; }), 2),
-                    "most_stocked": products.maxBy(fn(p: Product) -> double { return p.stock as double; }).slug,
-                    "by_letter": products.countBy(fn(p: Product) -> string { return Str.upper(p.name[..1]); })};
+            return {
+                "count": products.count(), "stock": products.sumOf("stock"), "average_price": Number.format(products.avg(fn(p: Product) -> double { return (p.price as double) / 100.0; }), 2),
+                "most_stocked": products.maxBy(fn(p: Product) -> double { return p.stock as double; }).slug,
+                "by_letter": products.countBy(fn(p: Product) -> string { return Str.upper(p.name[..1]); })
+            };
         }
     }
 }

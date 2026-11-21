@@ -11,11 +11,18 @@ namespace app {
     // ./app shop:import products.csv --chunk=50 --dry-run
     class ImportProductsCommand extends ConsoleCommand {
         constructor() {}
-        fn signature() -> string { return "shop:import {file : A CSV of name,price,stock} {--chunk=50 : Rows per job} {--dry-run : Only show what would be imported}"; }
-        fn description() -> string { return "Import products from a CSV, as a batch of queued jobs"; }
+        fn signature() -> string {
+            return "shop:import {file : A CSV of name,price,stock} {--chunk=50 : Rows per job} {--dry-run : Only show what would be imported}";
+        }
+        fn description() -> string {
+            return "Import products from a CSV, as a batch of queued jobs";
+        }
         fn handle(queue: QueueManager) -> int {
             let path = self.argument("file");
-            if (!new File(path).exists()) { self.error("No such file: " + path); return 1; }
+            if (!new File(path).exists()) {
+                self.error("No such file: " + path)
+                return 1
+            }
             let rows = collect(Str.lines(new File(path).read())).skip(1).reject(fn(l: string) -> bool { return Str.trim(l) == ""; });
             if (self.flag("dry-run")) {
                 let table = new Array<Array<string>>();
@@ -25,7 +32,10 @@ namespace app {
                 return 0;
             }
             let owner = User.query().firstWhere("role", "admin");
-            if (owner == null) { self.error("Seed an admin first (db:seed)."); return 1; }
+            if (owner == null) {
+                self.error("Seed an admin first (db:seed).")
+                return 1
+            }
             let jobs = new Array<Job>();
             for (chunk in rows.chunk(self.optionInt("chunk", 50) as int)) { jobs.push(new ImportProducts(chunk.all(), owner.id)); }
             let batch = queue.batch(jobs).name("import " + Path.basename(path)).then(new ImportFinished(Path.basename(path))).allowFailures().onQueue("imports").dispatch();
@@ -37,8 +47,12 @@ namespace app {
     // ./app shop:report --days=7
     class SalesReportCommand extends ConsoleCommand {
         constructor() {}
-        fn signature() -> string { return "shop:report {--days=7 : How far back} {--json}"; }
-        fn description() -> string { return "Sales over the last days, by product"; }
+        fn signature() -> string {
+            return "shop:report {--days=7 : How far back} {--json}";
+        }
+        fn description() -> string {
+            return "Sales over the last days, by product";
+        }
         fn handle() -> int {
             let since = Moment.now().subDays(self.optionInt("days", 7)).startOfDay();
             let orders = collect(Order.query().where("created_at", ">=", since.toDateTime()).get());
@@ -64,13 +78,25 @@ namespace app {
     // ./app shop:admin ada@shop.test  (asks before promoting)
     class MakeAdminCommand extends ConsoleCommand {
         constructor() {}
-        fn signature() -> string { return "shop:admin {email} {--force}"; }
-        fn description() -> string { return "Make a user an admin"; }
-        fn isolated() -> bool { return true; }
+        fn signature() -> string {
+            return "shop:admin {email} {--force}";
+        }
+        fn description() -> string {
+            return "Make a user an admin";
+        }
+        fn isolated() -> bool {
+            return true;
+        }
         fn handle() -> int {
             let u = User.query().firstWhere("email", self.argument("email"));
-            if (u == null) { self.error("No user with that email."); return 1; }
-            if (!self.flag("force") && !self.confirm("Make " + u.name + " an admin?", false)) { self.warn("Nothing changed."); return 1; }
+            if (u == null) {
+                self.error("No user with that email.")
+                return 1
+            }
+            if (!self.flag("force") && !self.confirm("Make " + u.name + " an admin?", false)) {
+                self.warn("Nothing changed.")
+                return 1
+            }
             u.role = "admin";
             u.save();
             self.task("Promoting " + u.name, fn() -> bool { return true; });

@@ -14,7 +14,9 @@ namespace app {
                 t.varchar("remember_token_value").nullable(); t.varchar("api_token", 64).nullable(); t.timestamps()
             })
         }
-        fn down() { Schema.dropIfExists("users"); }
+        fn down() {
+            Schema.dropIfExists("users");
+        }
     }
     class CreateProductsTable extends Migration {
         constructor() {}
@@ -24,7 +26,9 @@ namespace app {
                 t.foreignId("user_id").constrained(); t.timestamps()
             })
         }
-        fn down() { Schema.dropIfExists("products"); }
+        fn down() {
+            Schema.dropIfExists("products");
+        }
     }
     class CreateOrdersTable extends Migration {
         constructor() {}
@@ -36,10 +40,15 @@ namespace app {
                 t.id(); t.foreignId("order_id").constrained(); t.foreignId("product_id").constrained(); t.bigInteger("quantity"); t.bigInteger("price")
             })
         }
-        fn down() { Schema.dropIfExists("order_items"); Schema.dropIfExists("orders"); }
+        fn down() {
+            Schema.dropIfExists("order_items")
+            Schema.dropIfExists("orders")
+        }
     }
 
-    fn migrations() -> Array<Migration> { return [new CreateUsersTable() as Migration, new CreateProductsTable(), new CreateOrdersTable()]; }
+    fn migrations() -> Array<Migration> {
+        return [new CreateUsersTable() as Migration, new CreateProductsTable(), new CreateOrdersTable()];
+    }
 
     fn userFactory() -> Factory<User> {
         let hash = Passwords.make("password");                   // (hashed once: the cost is per hash)
@@ -73,6 +82,9 @@ namespace app {
     }
     class DatabaseSeeder extends Seeder {
         constructor() {}
-        fn run() { self.call(new UserSeeder()); self.call(new ProductSeeder()); }
+        fn run() {
+            self.call(new UserSeeder())
+            self.call(new ProductSeeder())
+        }
     }
 }

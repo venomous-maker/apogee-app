@@ -17,23 +17,41 @@ namespace app {
         public createdAt: DateTime? = null
         public updatedAt: DateTime? = null
         constructor() {}
-        fn orders() -> HasMany<Order> { return self.hasMany(); }
-        fn isAdmin() -> bool { return self.role == "admin"; }
+        fn orders() -> HasMany<Order> {
+            return self.hasMany();
+        }
+        fn isAdmin() -> bool {
+            return self.role == "admin";
+        }
         // auth
-        fn authId() -> string { return "${self.id}"; }
-        fn authPassword() -> string { return self.password; }
-        fn rememberToken() -> string { return self.rememberTokenValue; }
-        fn setRememberToken(t: string) { self.rememberTokenValue = t; }
+        fn authId() -> string {
+            return "${self.id}";
+        }
+        fn authPassword() -> string {
+            return self.password;
+        }
+        fn rememberToken() -> string {
+            return self.rememberTokenValue;
+        }
+        fn setRememberToken(t: string) {
+            self.rememberTokenValue = t;
+        }
         // notifications
-        fn routeNotificationFor(channel: string) -> string { return channel == "mail" ? self.email : ""; }
-        fn notifiableKey() -> string { return "User:${self.id}"; }
+        fn routeNotificationFor(channel: string) -> string {
+            return channel == "mail" ? self.email : "";
+        }
+        fn notifiableKey() -> string {
+            return "User:${self.id}";
+        }
         // "Ada Lovelace" -> "AL" (views show it)
         fn initials() -> string {
             let out = "";
             for (w in Str.words(self.name)) { out = out + Str.upper(w[..1]); }
             return out;
         }
-        fn memberSince() -> string { return self.createdAt == null ? "" : Moment.fromDateTime(self.createdAt).diffForHumans(); }
+        fn memberSince() -> string {
+            return self.createdAt == null ? "" : Moment.fromDateTime(self.createdAt).diffForHumans();
+        }
     }
 
     class Product extends Model implements Searchable {
@@ -48,16 +66,26 @@ namespace app {
         public createdAt: DateTime? = null
         public updatedAt: DateTime? = null
         constructor() {}
-        fn owner() -> BelongsTo<User> { return self.belongsTo(); }
+        fn owner() -> BelongsTo<User> {
+            return self.belongsTo();
+        }
         // /products/{product} (an id or a slug) and /products/{product:slug}: routing asks the model.
         static fn resolveRouteBinding(value: string, field: string) -> any {
             if (field == "" && Str.isDigits(value)) { return Product.find(value); }
             return Product.query().firstWhere(field == "" ? "slug" : field, value);
         }
-        fn priceText() -> string { return Number.currency((self.price as double) / 100.0, "KES"); }
-        fn inStock() -> bool { return self.stock > 0; }
-        fn summary() -> string { return Text.limit(self.description, 60, "…", true); }
-        fn added() -> string { return self.createdAt == null ? "" : Moment.fromDateTime(self.createdAt).diffForHumans(); }
+        fn priceText() -> string {
+            return Number.currency((self.price as double) / 100.0, "KES");
+        }
+        fn inStock() -> bool {
+            return self.stock > 0;
+        }
+        fn summary() -> string {
+            return Text.limit(self.description, 60, "…", true);
+        }
+        fn added() -> string {
+            return self.createdAt == null ? "" : Moment.fromDateTime(self.createdAt).diffForHumans();
+        }
         // What search finds it by (Scout keeps the index in step with saves).
         fn toSearchableArray() -> HashMap<string, any> {
             return {"name": self.name, "description": self.description, "in_stock": self.inStock()};
@@ -74,10 +102,18 @@ namespace app {
         public createdAt: DateTime? = null
         public updatedAt: DateTime? = null
         constructor() {}
-        fn customer() -> BelongsTo<User> { return self.belongsTo(); }
-        fn items() -> HasMany<OrderItem> { return self.hasMany(); }
-        fn totalText() -> string { return Number.currency((self.total as double) / 100.0, "KES"); }
-        fn placedAt() -> Moment { return Moment.fromDateTime(self.createdAt == null ? DateTime.now() : self.createdAt); }
+        fn customer() -> BelongsTo<User> {
+            return self.belongsTo();
+        }
+        fn items() -> HasMany<OrderItem> {
+            return self.hasMany();
+        }
+        fn totalText() -> string {
+            return Number.currency((self.total as double) / 100.0, "KES");
+        }
+        fn placedAt() -> Moment {
+            return Moment.fromDateTime(self.createdAt == null ? DateTime.now() : self.createdAt);
+        }
     }
 
     class OrderItem extends Model {
@@ -87,6 +123,8 @@ namespace app {
         public quantity: long = 0
         public price: long = 0
         constructor() {}
-        fn product() -> BelongsTo<Product> { return self.belongsTo(); }
+        fn product() -> BelongsTo<Product> {
+            return self.belongsTo();
+        }
     }
 }
