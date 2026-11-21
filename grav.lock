@@ -1,5 +1,4 @@
 # grav.lock: exact commits of the installed dependencies (generated; commit this file)
-apogee-framework = { source = "github.com/venomous-maker/apogee-framework", version = "v0.2.2", commit = "903ed7c2dc3a926bebb893dd0873f021864b57ce" }
 apogee-support = { source = "github.com/venomous-maker/apogee-support", version = "v0.2.0", commit = "de28b7c9fd7a0dbdea53a8d3f07f018f1a00dff5" }
 apogee-container = { source = "github.com/venomous-maker/apogee-container", version = "v0.2.0", commit = "f027cc66880e602a500174bf3f28fe6d943f727a" }
 apogee-config = { source = "github.com/venomous-maker/apogee-config", version = "v0.2.0", commit = "0d452e5b9098cec8b925a752a219b750e24fe00d" }
@@ -19,3 +18,17 @@ apogee-console = { source = "github.com/venomous-maker/apogee-console", version 
 apogee-scheduler = { source = "github.com/venomous-maker/apogee-scheduler", version = "v0.2.2", commit = "6d5a416619a6b8956ddd0824889a4f91f61e4eb0" }
 apogee-mail = { source = "github.com/venomous-maker/apogee-mail", version = "v0.2.2", commit = "952f2a8f4ce358c7c5d523bf30a1d05273410895" }
 grav-logger = { source = "github.com/venomous-maker/grav-logger", version = "v0.2.1", commit = "4e1c10a1591b09c4c234d8daaafb74f6e2c96af8" }
+apogee-crypt = { source = "github.com/venomous-maker/apogee-crypt", version = "v0.1.0", commit = "294365f614f8eb114c1a2dc68eddcc11f5d519e0" }
+apogee-lang = { source = "github.com/venomous-maker/apogee-lang", version = "v0.1.1", commit = "d9ce6a2d43b4211b4474e0b52302811ab03d6269" }
+apogee-sockets = { source = "github.com/venomous-maker/apogee-sockets", version = "v0.1.1", commit = "d7632c403584b1f43ad8787d130824ee72a06b79" }
+apogee-broadcast = { source = "github.com/venomous-maker/apogee-broadcast", version = "v0.1.1", commit = "6c422ca4111647cf696cf0ae6e401537da1760ea" }
+apogee-queue-dashboard = { source = "github.com/venomous-maker/apogee-queue-dashboard", version = "v0.2.0", commit = "5718544a8a3b8ef0ebf6547c249b9ba2569c3dea" }
+apogee-testing = { source = "github.com/venomous-maker/apogee-testing", version = "v0.1.0", commit = "fa33ed2dd67574a998a7b69c7f0457308599055a" }
+apogee-http-client = { source = "github.com/venomous-maker/apogee-http-client", version = "v0.1.0", commit = "81d3e99aa7ba4dfb0f2d651f9408cfba7e237cd8" }
+apogee-pennant = { source = "github.com/venomous-maker/apogee-pennant", version = "v0.1.0", commit = "71b79a204b46f78f9949fcbae0cf62e9826d7f3b" }
+apogee-scout = { source = "github.com/venomous-maker/apogee-scout", version = "v0.1.0", commit = "dc4c941aa6e57482c49eb8cf34d3af2a30ca78a3" }
+apogee-socialite = { source = "github.com/venomous-maker/apogee-socialite", version = "v0.1.0", commit = "f8bc74032e55dd6a7b432c80d08dee8b260a5a92" }
+apogee-framework = { source = "github.com/venomous-maker/apogee-framework", version = "v0.3.0", commit = "827c63c0e5c1e4095df95b7b709839fc3162d8ac" }
+apogee-storage = { source = "github.com/venomous-maker/apogee-storage", version = "v0.1.2", commit = "5864c5c8f504c5c821a434b10c91d4ef5f93e913" }
+apogee-telescope = { source = "github.com/venomous-maker/apogee-telescope", version = "v0.1.1", commit = "5b0ab2317d6344dcc8d1dba39e4f72c1cc2204e0" }
+apogee-pulse = { source = "github.com/venomous-maker/apogee-pulse", version = "v0.1.1", commit = "658491a9a957c34620614744c1d1a5d093443377" }
