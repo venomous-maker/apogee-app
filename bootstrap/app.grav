@@ -2,7 +2,6 @@
 // middleware, exception rendering, schedule, commands, migrations and seeders.
 import "std"
 import "apogee-framework"
-import "../app/models.grav"
 import "../app/domain.grav"
 import "../app/http.grav"
 import "../app/console.grav"

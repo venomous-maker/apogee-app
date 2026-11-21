@@ -23,7 +23,7 @@ class Browser {
         if (self.lastPath != "") { req.http.headers.set("Referer", "http://localhost" + self.lastPath) }
         let parts = new Array<string>()
         for (k in self.cookies.keys()) { parts.push(k + "=" + self.cookies[k]) }
-        if (parts.size() > 0) { req.http.headers.set("Cookie", Str.join(parts, "; ")) }
+        if (!parts.isEmpty()) { req.http.headers.set("Cookie", Str.join(parts, "; ")) }
         let res = self.app.handle(req)
         for (c in res.http.cookies()) { if (c.value == "") { self.cookies.remove(c.name) } else { self.cookies.put(c.name, c.value) } }
         self.last = res
@@ -83,7 +83,7 @@ test "the console: migrations and seeders, about, routes, the schedule, the shop
     assertEq(Str.contains(app.output(), "products.show") && Str.contains(app.output(), "api/products/{product:slug}"), true)
     app.call("schedule:list")
     let schedule = app.output()
-    assertEq(Str.contains(schedule, "30 8 * * 1-5") == false && Str.contains(schedule, "0 8 * * 1-5  remind stale orders") && Str.contains(schedule, "30 7 * * 1") && Str.contains(schedule, "heartbeat"), true)
+    assertEq(!Str.contains(schedule, "30 8 * * 1-5") && Str.contains(schedule, "0 8 * * 1-5  remind stale orders") && Str.contains(schedule, "30 7 * * 1") && Str.contains(schedule, "heartbeat"), true)
     assertEq(app.call("shop:hello Grav"), 0)
     assertEq(app.output(), "Hello, Grav!\n")
     let bob = userFactory().create(fields("email", "bob@shop.test", "name", "Bob Builder"))
@@ -106,7 +106,7 @@ test "pages: the home page (cached), products in pages, a product by slug, a 404
     let b = new Browser(app)
     let home = b.get("/")
     assertEq("${home.statusCode()} ${Str.contains(home.body(), "<h1>Welcome to Apogee Shop</h1>")} ${Str.contains(home.body(), "Grav Mug")} ${Str.endsWith(home.getHeader("X-Response-Time"), "ms")}", "200 true true true")
-    assertEq(Str.contains(home.body(), "#1 of 4") && Str.contains(home.body(), "Log in") && Str.contains(home.body(), "/static/app.css") == false, true)
+    assertEq(Str.contains(home.body(), "#1 of 4") && Str.contains(home.body(), "Log in") && !Str.contains(home.body(), "/static/app.css"), true)
     assertEq(app.make::<CacheRepository>().has("home:featured"), true)
     let page2 = b.get("/products?page=2")
     assertEq(Str.contains(page2.body(), "page 2 of 3") && Str.contains(page2.body(), "← Previous") && Str.contains(page2.body(), "/ Products"), true)

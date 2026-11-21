@@ -44,7 +44,7 @@ namespace app {
         fn handle(e: OrderPlaced) {
             for (item in e.order.items().get()) {
                 let p = Product.find(item.productId);
-                p.stock = p.stock - item.quantity;
+                p.stock -= item.quantity;
                 p.save();
             }
         }
