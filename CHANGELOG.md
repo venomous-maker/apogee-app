@@ -6,6 +6,8 @@ compiler versions it builds with.
 
 ## Unreleased
 
+## 0.2.2 (2026-11-21)
+
 ### Requirements
 
 - Uses apogee-framework v0.2.2.
