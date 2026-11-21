@@ -88,6 +88,12 @@ namespace app {
             events.subscribe(new ShopActivity());
             gate.policy::<Product, ProductPolicy>();
             gate.define("view-reports", fn(user: any, args: Array<any>) -> any { return user != null && (user as User).isAdmin(); });
+            // the dashboards, outside local development: admins only
+            for (ability in ["viewTelescope", "viewPulse", "viewQueueDashboard"]) {
+                gate.define(ability, fn(user: any, args: Array<any>) -> any { return user != null && (user as User).isAdmin(); });
+            }
+            // the search index follows product saves and deletes
+            Scout.observe::<Product>();
             // every page knows the signed-in user and the cart size
             views.composer("*", fn(name: string, data: HashMap<string, any>) {
                 if (!data.containsKey("year")) { data.put("year", Moment.now().year()); }
