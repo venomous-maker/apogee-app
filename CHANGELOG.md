@@ -6,6 +6,10 @@ compiler versions it builds with.
 
 ## Unreleased
 
+### Dependencies
+
+- Uses apogee-framework 0.4.0 (from their GitHub tags).
+
 ## 0.3.1 (2026-11-21)
 
 - On apogee-framework 0.3.1 (cheaper feature checks, Telescope and Pulse).
